@@ -35,6 +35,7 @@ pub enum Message {
     CellClicked { row: usize, col: usize },
     ChooseDigit(u8),
     Undo,
+    StopUndo,
     Hint,
     Drop { digit: u8, point: Point },
     DropZones { digit: u8, zones: Vec<(Id, Rectangle)> },
@@ -111,12 +112,20 @@ impl SudokuApp {
             }
             Message::CellClicked { row, col } => {
                 if let Some(Screen::Playing(game)) = &mut state.screen {
-                    *game = game.clone().select(row, col);
+                    if game.undoing {
+                        *game = game.clone().undo_cell(row, col);
+                    } else {
+                        *game = game.clone().select(row, col);
+                    }
                 }
                 Task::none()
             }
             Message::ChooseDigit(digit) => {
                 if let Some(Screen::Playing(game)) = &mut state.screen {
+                    if game.undoing {
+                        game.status = String::from("Stop undoing before placing a number.");
+                        return Task::none();
+                    }
                     if let Some((row, col)) = game.selected {
                         *game = game.clone().place(row, col, digit);
                     } else {
@@ -128,12 +137,24 @@ impl SudokuApp {
             }
             Message::Undo => {
                 if let Some(Screen::Playing(game)) = &mut state.screen {
-                    *game = game.clone().undo();
+                    state.status_generation = state.status_generation.wrapping_add(1);
+                    *game = game.clone().begin_undo();
                 }
-                hold_point_message(state)
+                Task::none()
+            }
+            Message::StopUndo => {
+                if let Some(Screen::Playing(game)) = &mut state.screen {
+                    state.status_generation = state.status_generation.wrapping_add(1);
+                    *game = game.clone().stop_undo();
+                }
+                Task::none()
             }
             Message::Hint => {
                 if let Some(Screen::Playing(game)) = &mut state.screen {
+                    if game.undoing {
+                        game.status = String::from("Stop undoing before requesting a hint.");
+                        return Task::none();
+                    }
                     *game = game.clone().hint();
                 }
                 hold_point_message(state)
@@ -146,6 +167,10 @@ impl SudokuApp {
             ),
             Message::DropZones { digit, zones } => {
                 if let Some(Screen::Playing(game)) = &mut state.screen {
+                    if game.undoing {
+                        game.status = String::from("Stop undoing before placing a number.");
+                        return Task::none();
+                    }
                     if game.complete {
                         return Task::none();
                     }
@@ -219,6 +244,17 @@ fn box_container<'a>(content: Element<'a, Message>) -> Element<'a, Message> {
         .into()
 }
 
+fn action_row(game: &Game) -> Element<'_, Message> {
+    let mut controls: Vec<Element<'_, Message>> = Vec::new();
+    controls.push(button("Undo").on_press(Message::Undo).into());
+    if game.undoing {
+        controls.push(button("Stop undoing").on_press(Message::StopUndo).into());
+    }
+    controls.push(button("Hint").on_press(Message::Hint).into());
+    controls.push(button("New puzzle").on_press(Message::NewPuzzle).into());
+    row(controls).spacing(12).into()
+}
+
 fn playing_view(game: &Game) -> Element<'_, Message> {
     let cs = cell_size(game.difficulty);
     let bw = game.difficulty.box_width();
@@ -285,7 +321,7 @@ fn playing_view(game: &Game) -> Element<'_, Message> {
         text("Press Hint to see which numbers cannot go in the selected empty cell.")
             .size(22)
             .width(Length::Fill),
-        text("Click a cell you filled, then press Undo to clear it.")
+        text("Press Undo, then click a cell you filled. Press Stop undoing to cancel.")
             .size(22)
             .width(Length::Fill),
         text("Press New puzzle to return to the difficulty menu.")
@@ -305,12 +341,7 @@ fn playing_view(game: &Game) -> Element<'_, Message> {
         text(format!("Score: {}", game.score))
             .size(32)
             .color(iced::Color::BLACK),
-        row![
-            button("Undo").on_press(Message::Undo),
-            button("Hint").on_press(Message::Hint),
-            button("New puzzle").on_press(Message::NewPuzzle),
-        ]
-        .spacing(12),
+        action_row(game),
         text(if game.complete { "Complete!" } else { "" }).size(22),
         text(game.status.clone())
             .size(20)

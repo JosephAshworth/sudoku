@@ -24,6 +24,7 @@ fn repeat_places(reasons: &[ForbiddenReason]) -> String {
 }
 
 pub const DEFAULT_STATUS: &str = "";
+pub const UNDO_PROMPT: &str = "Click the cell you want to undo.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cell {
@@ -39,6 +40,7 @@ pub struct Game {
     pub cells: Vec<Vec<Cell>>,
     pub score: i32,
     pub selected: Option<(usize, usize)>,
+    pub undoing: bool,
     pub undo_stack: Vec<(usize, usize)>,
     pub status: String,
     pub hint_text: String,
@@ -62,6 +64,7 @@ impl Game {
             cells,
             score: 0,
             selected: None,
+            undoing: false,
             undo_stack: Vec::new(),
             status: String::from(DEFAULT_STATUS),
             hint_text: String::new(),
@@ -175,19 +178,36 @@ impl Game {
         next
     }
 
-    pub fn undo(self) -> Self {
+    pub fn begin_undo(self) -> Self {
+        if self.undoing {
+            return self;
+        }
         let mut next = self;
+        next.undoing = true;
+        next.selected = None;
+        next.status = String::from(UNDO_PROMPT);
+        next
+    }
 
-        let Some((row, col)) = next.selected else {
-            next.status = String::from(
-                "Select the cell you filled that you want to undo.",
-            );
-            return next;
+    pub fn stop_undo(self) -> Self {
+        let mut next = self;
+        next.undoing = false;
+        next.status = if next.complete {
+            String::from("Puzzle complete!")
+        } else {
+            String::from(DEFAULT_STATUS)
         };
+        next
+    }
 
+    pub fn undo_cell(self, row: usize, col: usize) -> Self {
+        let mut next = self;
+        if !next.undoing {
+            return next;
+        }
         if !matches!(next.cells[row][col], Cell::Player(_)) {
             next.status = String::from(
-                "Select the cell you filled that you want to undo.",
+                "You can only undo a cell you filled. Click one of those, or stop undoing.",
             );
             return next;
         }
@@ -196,7 +216,10 @@ impl Game {
         next.score -= 1;
         next.undo_stack.retain(|&p| p != (row, col));
         next.complete = false;
-        next.status = String::from("Undid your entry. You lost a point.");
+        next.selected = None;
+        next.status = String::from(
+            "Undid your entry. You lost a point. Click another cell you filled, or stop undoing.",
+        );
         next
     }
 
@@ -262,13 +285,53 @@ mod tests {
         for r in 0..size {
             for c in 0..size {
                 if puzzle.givens[r][c] {
-                    let game = Game::new(puzzle.clone()).select(r, c).undo();
+                    let game = Game::new(puzzle.clone())
+                        .begin_undo()
+                        .undo_cell(r, c);
                     assert!(matches!(game.cells[r][c], Cell::Given(_)));
                     assert_eq!(game.score, 0);
+                    assert!(game.undoing);
+                    assert!(game.status.contains("only undo a cell you filled"));
                     return;
                 }
             }
         }
+    }
+
+    #[test]
+    fn undo_mode_clears_filled_cell_until_stopped() {
+        let puzzle = grid::generate(grid::Difficulty::Easy);
+        let game = Game::new(puzzle.clone());
+        let size = puzzle.difficulty.size();
+        for r in 0..size {
+            for c in 0..size {
+                if puzzle.givens[r][c] {
+                    continue;
+                }
+                let digit = puzzle.solution[r][c];
+                let placed = game.clone().place(r, c, digit);
+                if !matches!(placed.cells[r][c], Cell::Player(_)) {
+                    continue;
+                }
+                let prompted = placed.begin_undo();
+                assert!(prompted.undoing);
+                assert!(prompted.selected.is_none());
+                assert_eq!(prompted.status, UNDO_PROMPT);
+
+                let undone = prompted.undo_cell(r, c);
+                assert!(matches!(undone.cells[r][c], Cell::Empty));
+                assert_eq!(undone.score, 0);
+                assert!(undone.undoing);
+                assert!(undone.status.contains("lost a point"));
+
+                let stopped = undone.stop_undo();
+                assert!(!stopped.undoing);
+                assert_eq!(stopped.status, DEFAULT_STATUS);
+                assert!(matches!(stopped.cells[r][c], Cell::Empty));
+                return;
+            }
+        }
+        panic!("expected a cell the player could fill");
     }
 
     #[test]
