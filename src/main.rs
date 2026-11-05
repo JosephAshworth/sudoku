@@ -10,9 +10,6 @@ fn app_style(_state: &SudokuApp, _theme: &iced::Theme) -> iced::theme::Style {
 }
 
 fn main() -> iced::Result {
-    #[cfg(target_arch = "wasm32")]
-    console_error_panic_hook::set_once();
-
     iced::application(SudokuApp::default, SudokuApp::update, SudokuApp::view)
         .title("Sudoku")
         .theme(iced::Theme::Light)

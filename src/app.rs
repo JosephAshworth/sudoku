@@ -1,9 +1,6 @@
 use iced::widget::{button, column, container, row, text, Space};
 use iced::widget::Id;
-use iced::{Alignment, Element, Length, Task, Theme};
-#[cfg(not(target_arch = "wasm32"))]
-use iced::{Point, Rectangle};
-#[cfg(not(target_arch = "wasm32"))]
+use iced::{Alignment, Element, Length, Point, Rectangle, Task, Theme};
 use iced_drop;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -39,9 +36,7 @@ pub enum Message {
     ChooseDigit(u8),
     Undo,
     Hint,
-    #[cfg(not(target_arch = "wasm32"))]
     Drop { digit: u8, point: Point },
-    #[cfg(not(target_arch = "wasm32"))]
     DropZones { digit: u8, zones: Vec<(Id, Rectangle)> },
     RestoreStatus(u64),
 }
@@ -74,20 +69,10 @@ fn hold_point_message(state: &mut SudokuApp) -> Task<Message> {
     if complete || !earned {
         return Task::none();
     }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        Task::future(async move {
-            std::thread::sleep(std::time::Duration::from_secs(3));
-            Message::RestoreStatus(token)
-        })
-    }
-    #[cfg(target_arch = "wasm32")]
-    {
-        Task::future(async move {
-            gloo_timers::future::TimeoutFuture::new(3_000).await;
-            Message::RestoreStatus(token)
-        })
-    }
+    Task::future(async move {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        Message::RestoreStatus(token)
+    })
 }
 
 fn cell_ids() -> &'static (HashMap<(usize, usize), Id>, HashMap<Id, (usize, usize)>) {
@@ -153,14 +138,12 @@ impl SudokuApp {
                 }
                 hold_point_message(state)
             }
-            #[cfg(not(target_arch = "wasm32"))]
             Message::Drop { digit, point } => iced_drop::zones_on_point(
                 move |zones| Message::DropZones { digit, zones },
                 point,
                 None,
                 None,
             ),
-            #[cfg(not(target_arch = "wasm32"))]
             Message::DropZones { digit, zones } => {
                 if let Some(Screen::Playing(game)) = &mut state.screen {
                     if game.complete {
@@ -268,20 +251,22 @@ fn playing_view(game: &Game) -> Element<'_, Message> {
     let tray = row(
         digits
             .into_iter()
-            .map(number_tile)
+            .map(|d| {
+                iced_drop::droppable(text(format!("{d}")).size(32))
+                    .drag_overlay(true)
+                    .on_press(Message::ChooseDigit(d))
+                    .on_drop(move |point, _bounds| Message::Drop { digit: d, point })
+                    .into()
+            })
             .collect::<Vec<_>>(),
     )
     .spacing(16)
     .align_y(Alignment::Center);
 
     let instructions = column![
-        text(if cfg!(target_arch = "wasm32") {
-            "Click a cell, then click a number."
-        } else {
-            "Click a cell, then click a number, or drag a number into a cell."
-        })
-        .size(22)
-        .width(Length::Fill),
+        text("Click a cell, then click a number, or drag a number into a cell.")
+            .size(22)
+            .width(Length::Fill),
         text("Press Hint to see which numbers cannot go in the selected empty cell.")
             .size(22)
             .width(Length::Fill),
@@ -340,27 +325,6 @@ fn playing_view(game: &Game) -> Element<'_, Message> {
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
-}
-
-fn number_tile(digit: u8) -> Element<'static, Message> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        button(text(format!("{digit}")).size(32))
-            .on_press(Message::ChooseDigit(digit))
-            .padding([4, 8])
-            .into()
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        iced_drop::droppable(text(format!("{digit}")).size(32))
-            .drag_overlay(true)
-            .on_press(Message::ChooseDigit(digit))
-            .on_drop(move |point, _bounds| Message::Drop {
-                digit,
-                point,
-            })
-            .into()
-    }
 }
 
 fn cell_widget(game: &Game, row: usize, col: usize, cs: f32) -> Element<'_, Message> {
