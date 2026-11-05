@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+rand = "0.9"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 iced = "0.14"
 iced_drop = { version = "0.2.54", features = ["helpers"] }
-rand = "0.9"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+iced = { version = "0.14", features = ["webgl", "fira-sans"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+console_error_panic_hook = "0.1"
