@@ -178,44 +178,25 @@ impl Game {
     pub fn undo(self) -> Self {
         let mut next = self;
 
-        let target = if let Some((r, c)) = next.selected {
-            if matches!(next.cells[r][c], Cell::Player(_)) {
-                Some((r, c))
-            } else {
-                next.status =
-                    String::from("Undo only works on cells you filled (not givens or empty).");
-                return next;
-            }
-        } else {
-            None
+        let Some((row, col)) = next.selected else {
+            next.status = String::from(
+                "Select the cell you filled that you want to undo.",
+            );
+            return next;
         };
 
-        let (row, col) = match target {
-            Some(rc) => rc,
-            None => match next.undo_stack.last().copied() {
-                Some(rc) => rc,
-                None => {
-                    next.status = String::from("Nothing to undo.");
-                    return next;
-                }
-            },
-        };
-
-        match next.cells[row][col] {
-            Cell::Player(_) => {
-                next.cells[row][col] = Cell::Empty;
-                next.score -= 1;
-                next.undo_stack.retain(|&p| p != (row, col));
-                next.complete = false;
-                next.status = String::from("Undid your entry. You lost a point.");
-            }
-            Cell::Given(_) => {
-                next.status = String::from("Cannot undo a pre-filled cell.");
-            }
-            Cell::Empty => {
-                next.status = String::from("That cell is already empty.");
-            }
+        if !matches!(next.cells[row][col], Cell::Player(_)) {
+            next.status = String::from(
+                "Select the cell you filled that you want to undo.",
+            );
+            return next;
         }
+
+        next.cells[row][col] = Cell::Empty;
+        next.score -= 1;
+        next.undo_stack.retain(|&p| p != (row, col));
+        next.complete = false;
+        next.status = String::from("Undid your entry. You lost a point.");
         next
     }
 

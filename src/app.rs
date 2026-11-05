@@ -248,11 +248,26 @@ fn playing_view(game: &Game) -> Element<'_, Message> {
     let board = column(board_rows).spacing(0).align_x(Alignment::Center);
 
     let digits = game.available_digits();
+    let tile = 48.0;
     let tray = row(
         digits
             .into_iter()
             .map(|d| {
-                iced_drop::droppable(text(format!("{d}")).size(32))
+                let label = container(text(format!("{d}")).size(24).color(iced::Color::BLACK))
+                    .width(Length::Fixed(tile))
+                    .height(Length::Fixed(tile))
+                    .align_x(Alignment::Center)
+                    .align_y(Alignment::Center)
+                    .style(|_theme: &Theme| container::Style {
+                        background: Some(iced::Background::Color(iced::Color::WHITE)),
+                        border: iced::Border {
+                            width: 2.0,
+                            color: iced::Color::from_rgb(0.25, 0.25, 0.28),
+                            radius: 0.0.into(),
+                        },
+                        ..Default::default()
+                    });
+                iced_drop::droppable(label)
                     .drag_overlay(true)
                     .on_press(Message::ChooseDigit(d))
                     .on_drop(move |point, _bounds| Message::Drop { digit: d, point })
@@ -260,7 +275,7 @@ fn playing_view(game: &Game) -> Element<'_, Message> {
             })
             .collect::<Vec<_>>(),
     )
-    .spacing(16)
+    .spacing(8)
     .align_y(Alignment::Center);
 
     let instructions = column![
