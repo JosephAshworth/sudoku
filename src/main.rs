@@ -4,7 +4,7 @@ use app::SudokuApp;
 
 fn app_style(_state: &SudokuApp, _theme: &iced::Theme) -> iced::theme::Style {
     iced::theme::Style {
-        background_color: iced::Color::WHITE,
+        background_color: iced::Color::from_rgb(0.45, 0.65, 0.95),
         text_color: iced::Color::BLACK,
     }
 }
